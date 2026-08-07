@@ -1,0 +1,1 @@
+CREATE TABLE IF NOT EXISTS watched_wallets (id SERIAL PRIMARY KEY, wallet_address VARCHAR(64) UNIQUE NOT NULL, label VARCHAR(100), created_at TIMESTAMP DEFAULT NOW()); CREATE INDEX IF NOT EXISTS idx_watched_wallets_address ON watched_wallets(wallet_address);

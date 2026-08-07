@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Detail wallet — Solana whale tracker</title>
+<style>
+  :root {
+    --bg: #0a0e14;
+    --panel: #10151d;
+    --panel-2: #161c26;
+    --border: #232a35;
+    --text: #e8ecf1;
+    --text-dim: #7a8494;
+    --accent: #14e0a4;
+    --danger: #ff5c7a;
+    --mono: 'SF Mono', 'Consolas', 'Menlo', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
+    padding: 24px;
+    min-height: 100vh;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+
+  .back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-dim);
+    text-decoration: none;
+    font-size: 13px;
+    margin-bottom: 18px;
+    transition: color 0.15s ease;
+  }
+  .back-link:hover { color: var(--accent); }
+
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 28px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .header-title h1 {
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    margin-bottom: 6px;
+  }
+  .header-title .addr-full {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text-dim);
+    word-break: break-all;
+  }
+  .header-title .label-tag {
+    display: inline-block;
+    color: var(--accent);
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .status {
+    font-size: 12px;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--text-dim);
+    transition: background 0.2s ease;
+  }
+  .dot.ok { background: var(--accent); animation: pulse 2s ease-in-out infinite; }
+  .dot.error { background: var(--danger); animation: none; }
+  .dot.loading { background: #ffb84d; animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  .status.error #statusText { color: var(--danger); }
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+  }
+  .card .label {
+    font-size: 12px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+  }
+  .card .value {
+    font-family: var(--mono);
+    font-size: 24px;
+    font-weight: 600;
+  }
+  .card .value.accent { color: var(--accent); }
+  .card .value.danger { color: var(--danger); }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+  .panel-head {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .sparkline-wrap { padding: 18px; }
+  .sparkline-svg { width: 100%; height: 80px; display: block; }
+  .sparkline-empty {
+    padding: 30px 20px;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    text-align: left;
+    padding: 10px 18px;
+    color: var(--text-dim);
+    font-weight: 500;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--mono);
+  }
+  tr:last-child td { border-bottom: none; }
+  .addr { color: var(--text-dim); }
+  .amount { color: var(--accent); font-weight: 600; }
+  .profit-pos { color: var(--accent); font-weight: 600; }
+  .profit-neg { color: var(--danger); font-weight: 600; }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgba(20,224,164,0.12);
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .badge.buy { background: rgba(20,224,164,0.12); color: var(--accent); }
+  .badge.sell { background: rgba(255,92,122,0.12); color: var(--danger); }
+  .badge.transfer { background: rgba(122,132,148,0.15); color: var(--text-dim); }
+
+  .empty {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+
+  .not-found {
+    padding: 60px 20px;
+    text-align: center;
+  }
+  .not-found h2 { font-size: 18px; margin-bottom: 8px; }
+  .not-found p { color: var(--text-dim); font-size: 13px; margin-bottom: 16px; }
+  .not-found a { color: var(--accent); text-decoration: none; font-size: 13px; }
+  .not-found a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back-link" href="dashboard.html">&larr; Kembali ke dashboard</a>
+
+  <header id="pageHeader">
+    <div class="header-title">
+      <div class="label-tag" id="walletLabel">Memuat...</div>
+      <h1>Detail wallet</h1>
+      <div class="addr-full" id="walletAddressFull"></div>
+    </div>
+    <div class="status" id="statusWrap">
+      <span class="dot loading" id="statusDot"></span>
+      <span id="statusText">Menghubungkan...</span>
+    </div>
+  </header>
+
+  <div id="content" style="display:none;">
+    <div class="cards">
+      <div class="card">
+        <div class="label">ROI</div>
+        <div class="value" id="roiValue">—</div>
+      </div>
+      <div class="card">
+        <div class="label">Win rate</div>
+        <div class="value" id="winRateValue">—</div>
+      </div>
+      <div class="card">
+        <div class="label">Avg holding</div>
+        <div class="value" id="holdingValue">—</div>
+      </div>
+      <div class="card">
+        <div class="label">Total profit (USD)</div>
+        <div class="value accent" id="profitValue">—</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">Riwayat profit kumulatif</div>
+      <div class="sparkline-wrap" id="sparklineWrap"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">Posisi ditutup (closed trades)</div>
+      <div id="closedTradesWrap">
+        <table>
+          <thead>
+            <tr><th>Token</th><th>Profit (USD)</th><th>Modal (USD)</th><th>Waktu</th></tr>
+          </thead>
+          <tbody id="closedTradesBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">Riwayat transaksi</div>
+      <div id="txWrap">
+        <table>
+          <thead>
+            <tr><th>Tipe</th><th>Jumlah</th><th>Token</th><th>Waktu</th></tr>
+          </thead>
+          <tbody id="txBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="notFound" class="not-found" style="display:none;">
+    <h2>Wallet tidak ditemukan</h2>
+    <p>Wallet ini tidak ada di daftar pantauan, atau alamatnya tidak valid.</p>
+    <a href="dashboard.html">&larr; Kembali ke dashboard</a>
+  </div>
+</div>
+
+<script>
+const API_BASE = 'http://localhost:5000/api';
+
+// Ambil alamat wallet dari query string: wallet-detail.html?address=...
+const params = new URLSearchParams(window.location.search);
+const walletAddress = params.get('address');
+
+function formatNumber(n) {
+  return Number(n).toLocaleString('id-ID', { maximumFractionDigits: 2 });
+}
+
+function formatTime(t) {
+  const d = new Date(t);
+  return d.toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function formatHolding(hours) {
+  if (!hours || hours <= 0) return '—';
+  if (hours < 24) return `${hours.toFixed(1)} jam`;
+  return `${(hours / 24).toFixed(1)} hari`;
+}
+
+function setStatus(state, message) {
+  const wrap = document.getElementById('statusWrap');
+  const dot = document.getElementById('statusDot');
+  const text = document.getElementById('statusText');
+  dot.className = 'dot ' + state; // 'ok' | 'error' | 'loading'
+  wrap.classList.toggle('error', state === 'error');
+  text.textContent = message;
+}
+
+// Sparkline SVG manual, ukuran lebih besar dari versi ringkas di
+// dashboard.html karena di sini jadi elemen utama halaman, bukan
+// pelengkap kecil di dalam kartu.
+function buildSparkline(history) {
+  if (!history || history.length < 2) {
+    return '<div class="sparkline-empty">Belum cukup data untuk menggambar grafik riwayat profit.</div>';
+  }
+  const values = history.map(h => h.cumulative_profit);
+  const min = Math.min(...values, 0);
+  const max = Math.max(...values, 0);
+  const range = (max - min) || 1;
+  const w = 800, h = 80;
+
+  const points = values.map((v, i) => {
+    const x = (i / (values.length - 1)) * w;
+    const y = h - ((v - min) / range) * h;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+
+  const last = values[values.length - 1];
+  const color = last >= 0 ? 'var(--accent)' : 'var(--danger)';
+
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" class="sparkline-svg">
+    <polyline points="${points}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+  </svg>`;
+}
+
+function renderClosedTrades(closedTrades) {
+  const tbody = document.getElementById('closedTradesBody');
+
+  if (closedTrades.length === 0) {
+    document.getElementById('closedTradesWrap').innerHTML = '<div class="empty">Belum ada posisi trading yang ditutup untuk wallet ini.</div>';
+    return;
+  }
+
+  tbody.innerHTML = closedTrades.map(t => {
+    const profitClass = t.profit_usd >= 0 ? 'profit-pos' : 'profit-neg';
+    return `
+    <tr>
+      <td><span class="badge">${t.token}</span></td>
+      <td class="${profitClass}">${formatNumber(t.profit_usd)}</td>
+      <td class="addr">${formatNumber(t.cost_basis_usd)}</td>
+      <td class="addr">${formatTime(t.block_time)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderTransactions(transactions) {
+  const tbody = document.getElementById('txBody');
+
+  if (transactions.length === 0) {
+    document.getElementById('txWrap').innerHTML = '<div class="empty">Belum ada transaksi tercatat untuk wallet ini.</div>';
+    return;
+  }
+
+  tbody.innerHTML = transactions.map(tx => {
+    // type null = transfer SOL native polos (bukan trading)
+    const badgeClass = tx.type === 'buy' ? 'badge buy' : tx.type === 'sell' ? 'badge sell' : 'badge transfer';
+    const badgeText = tx.type === 'buy' ? 'BELI' : tx.type === 'sell' ? 'JUAL' : 'TRANSFER';
+    return `
+    <tr>
+      <td><span class="${badgeClass}">${badgeText}</span></td>
+      <td class="amount">${formatNumber(tx.amount)}</td>
+      <td class="addr">${tx.token}</td>
+      <td class="addr">${formatTime(tx.block_time)}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function loadWalletDetail() {
+  const res = await fetch(`${API_BASE}/wallets/${encodeURIComponent(walletAddress)}/detail`);
+  const json = await res.json();
+
+  if (!json.success) {
+    // Wallet tidak ditemukan (404) atau error lain -> tampilkan
+    // halaman "not found" alih-alih membiarkan halaman kosong.
+    document.getElementById('pageHeader').style.display = 'none';
+    document.getElementById('content').style.display = 'none';
+    document.getElementById('notFound').style.display = 'block';
+    throw new Error(json.message || 'Gagal memuat detail wallet');
+  }
+
+  const data = json.data;
+
+  document.getElementById('walletLabel').textContent = data.label || 'Tanpa label';
+  document.getElementById('walletAddressFull').textContent = data.wallet_address;
+
+  const roiEl = document.getElementById('roiValue');
+  roiEl.textContent = `${data.roi_percent}%`;
+  roiEl.className = 'value ' + (data.roi_percent >= 0 ? 'accent' : 'danger');
+
+  document.getElementById('winRateValue').textContent = `${data.win_rate_percent}%`;
+  document.getElementById('holdingValue').textContent = formatHolding(data.avg_holding_hours);
+  document.getElementById('profitValue').textContent = formatNumber(data.total_realized_profit_usd);
+
+  document.getElementById('sparklineWrap').innerHTML = buildSparkline(data.profit_history);
+
+  renderClosedTrades(data.closed_trades);
+  renderTransactions(data.transactions);
+
+  document.getElementById('content').style.display = 'block';
+}
+
+async function init() {
+  if (!walletAddress) {
+    setStatus('error', 'Tidak ada alamat wallet di URL');
+    document.getElementById('pageHeader').style.display = 'none';
+    document.getElementById('notFound').style.display = 'block';
+    document.querySelector('#notFound h2').textContent = 'Alamat wallet tidak ditemukan di URL';
+    document.querySelector('#notFound p').textContent = 'Buka halaman ini lewat kartu Wallet Analytics di dashboard.';
+    return;
+  }
+
+  setStatus('loading', 'Memuat data...');
+  try {
+    await loadWalletDetail();
+    setStatus('ok', 'Terhubung ke server');
+  } catch (err) {
+    setStatus('error', err.message || 'Gagal terhubung ke server');
+    console.error(err);
+  }
+}
+
+init();
+setInterval(init, 30000);
+</script>
+</body>
+</html>

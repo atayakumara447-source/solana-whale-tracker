@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Solana whale tracker</title>
+<style>
+  :root {
+    --bg: #0a0e14;
+    --panel: #10151d;
+    --panel-2: #161c26;
+    --border: #232a35;
+    --text: #e8ecf1;
+    --text-dim: #7a8494;
+    --accent: #14e0a4;
+    --danger: #ff5c7a;
+    --mono: 'SF Mono', 'Consolas', 'Menlo', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
+    padding: 24px;
+    min-height: 100vh;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 28px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  h1 {
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+  h1 span { color: var(--accent); }
+  .status {
+    font-size: 12px;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--text-dim);
+    transition: background 0.2s ease;
+  }
+  .dot.ok { background: var(--accent); animation: pulse 2s ease-in-out infinite; }
+  .dot.error { background: var(--danger); animation: none; }
+  .dot.loading { background: #ffb84d; animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  .status.error #statusText { color: var(--danger); }
+  .status-updated {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-left: 4px;
+  }
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+  }
+  .card .label {
+    font-size: 12px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+  }
+  .card .value {
+    font-family: var(--mono);
+    font-size: 26px;
+    font-weight: 600;
+  }
+  .card .value.accent { color: var(--accent); }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .panel-head {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    text-align: left;
+    padding: 10px 18px;
+    color: var(--text-dim);
+    font-weight: 500;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--mono);
+  }
+  tr:last-child td { border-bottom: none; }
+  tr.row-new {
+    animation: rowIn 1.2s ease;
+  }
+  @keyframes rowIn {
+    0% { background: rgba(20,224,164,0.22); }
+    100% { background: transparent; }
+  }
+  .addr { color: var(--text-dim); }
+  .amount { color: var(--accent); font-weight: 600; }
+  .value.flash {
+    animation: valueFlash 0.6s ease;
+  }
+  @keyframes valueFlash {
+    0% { opacity: 0.3; transform: translateY(-2px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgba(20,224,164,0.12);
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .empty {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 24px;
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 9px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+  .btn:hover { border-color: var(--accent); background: var(--panel-2); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-icon { font-size: 13px; }
+  .btn.primary { border-color: var(--accent); color: var(--accent); }
+  #importFileInput { display: none; }
+  .toolbar-msg {
+    font-size: 12px;
+    color: var(--text-dim);
+    align-self: center;
+  }
+  .toolbar-msg.error { color: var(--danger); }
+  .toolbar-msg.success { color: var(--accent); }
+
+  .heatmap-wrap {
+    padding: 18px;
+    overflow-x: auto;
+  }
+  .heatmap-grid {
+    display: grid;
+    /* kolom label token + 24 kolom jam */
+    grid-template-columns: 56px repeat(24, 1fr);
+    gap: 3px;
+    min-width: 640px;
+  }
+  .heatmap-hour-label {
+    font-size: 9px;
+    color: var(--text-dim);
+    text-align: center;
+    font-family: var(--mono);
+  }
+  .heatmap-token-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-family: var(--mono);
+    display: flex;
+    align-items: center;
+    padding-right: 6px;
+  }
+  .heatmap-cell {
+    aspect-ratio: 1;
+    border-radius: 3px;
+    background: var(--panel-2);
+    position: relative;
+    cursor: default;
+    transition: transform 0.1s ease;
+  }
+  .heatmap-cell:hover {
+    transform: scale(1.15);
+    outline: 1px solid var(--accent);
+    z-index: 2;
+  }
+  .heatmap-cell .tooltip {
+    display: none;
+    position: absolute;
+    bottom: 130%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1c2330;
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 11px;
+    font-family: var(--mono);
+    padding: 6px 9px;
+    border-radius: 6px;
+    white-space: nowrap;
+    z-index: 10;
+    pointer-events: none;
+  }
+  .heatmap-cell:hover .tooltip { display: block; }
+  .heatmap-legend {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 14px;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .heatmap-legend .swatch {
+    width: 12px; height: 12px; border-radius: 3px;
+  }
+
+  .wa-section { margin-top: 16px; }
+  .wa-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 14px;
+    padding: 18px;
+  }
+  .wa-card {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, transform 0.1s ease;
+  }
+  .wa-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+  }
+  .wa-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+  }
+  .wa-head .addr {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text);
+  }
+  .wa-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .wa-metric-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+  .wa-metric-value {
+    font-family: var(--mono);
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .wa-profit-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+  .wa-sparkline { width: 100%; height: 40px; display: block; }
+  .wa-sparkline-empty {
+    font-size: 11px;
+    color: var(--text-dim);
+    padding: 10px 0;
+  }
+  .wa-foot {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 10px;
+    font-size: 11px;
+    color: var(--text-dim);
+    font-family: var(--mono);
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Solana whale <span>tracker</span></h1>
+    <div class="status" id="statusWrap">
+      <span class="dot loading" id="statusDot"></span>
+      <span id="statusText">Menghubungkan...</span>
+      <span class="status-updated" id="statusUpdated"></span>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <button class="btn" id="exportTxBtn">
+      <span class="btn-icon">⬇</span> Export transaksi (CSV)
+    </button>
+    <button class="btn" id="exportAnalyticsBtn">
+      <span class="btn-icon">⬇</span> Export wallet analytics (CSV)
+    </button>
+    <button class="btn primary" id="importWalletBtn">
+      <span class="btn-icon">⬆</span> Import wallet (CSV)
+    </button>
+    <input type="file" id="importFileInput" accept=".csv">
+    <span class="toolbar-msg" id="toolbarMsg"></span>
+  </div>
+
+  <div class="cards">
+    <div class="card">
+      <div class="label">Total transaksi</div>
+      <div class="value" id="totalTx">—</div>
+    </div>
+    <div class="card">
+      <div class="label">Wallet dipantau</div>
+      <div class="value" id="totalWallet">—</div>
+    </div>
+    <div class="card">
+      <div class="label">Total volume (SOL)</div>
+      <div class="value accent" id="totalVolume">—</div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <div class="panel-head">Transaksi terbaru</div>
+      <div id="txTableWrap">
+        <table>
+          <thead>
+            <tr><th>Wallet</th><th>Jumlah</th><th>Token</th><th>Waktu</th></tr>
+          </thead>
+          <tbody id="txBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">Heatmap token &times; jam</div>
+      <div class="heatmap-wrap" id="heatmapWrap"></div>
+    </div>
+  </div>
+
+  <div class="panel wa-section">
+    <div class="panel-head">Wallet analytics</div>
+    <div class="wa-grid" id="waWrap"></div>
+  </div>
+</div>
+
+<script>
+const API_BASE = 'http://localhost:5000/api';
+
+function shortenAddress(addr) {
+  if (!addr || addr.length < 12) return addr;
+  return addr.slice(0, 6) + '...' + addr.slice(-4);
+}
+
+function formatNumber(n) {
+  return Number(n).toLocaleString('id-ID', { maximumFractionDigits: 2 });
+}
+
+function formatTime(t) {
+  const d = new Date(t);
+  return d.toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+function setValueWithFlash(elId, newText) {
+  const el = document.getElementById(elId);
+  if (el.textContent === newText) return; // tidak berubah, tidak perlu animasi
+  el.textContent = newText;
+  el.classList.remove('flash');
+  void el.offsetWidth; // trik supaya animasi bisa di-replay
+  el.classList.add('flash');
+}
+
+async function loadSummary() {
+  const res = await fetch(`${API_BASE}/stats/summary`);
+  const json = await res.json();
+  if (!json.success) throw new Error('Gagal memuat ringkasan');
+  setValueWithFlash('totalTx', formatNumber(json.data.totalTransaksi));
+  setValueWithFlash('totalWallet', formatNumber(json.data.totalWallet));
+  setValueWithFlash('totalVolume', formatNumber(json.data.totalVolume));
+}
+
+// Menyimpan signature transaksi yang sudah pernah ditampilkan,
+// supaya kita tahu baris mana yang benar-benar baru dan perlu
+// di-highlight (bukan sekadar re-render ulang tiap 30 detik).
+const seenSignatures = new Set();
+
+async function loadRecent() {
+  const res = await fetch(`${API_BASE}/stats/recent?limit=15`);
+  const json = await res.json();
+  if (!json.success) throw new Error('Gagal memuat transaksi');
+  const tbody = document.getElementById('txBody');
+
+  // Pastikan wrapper tabel ada lagi (jika sebelumnya diganti pesan "empty")
+  if (!document.getElementById('txBody')) {
+    document.getElementById('txTableWrap').innerHTML = `
+      <table>
+        <thead>
+          <tr><th>Wallet</th><th>Jumlah</th><th>Token</th><th>Waktu</th></tr>
+        </thead>
+        <tbody id="txBody"></tbody>
+      </table>`;
+  }
+
+  if (json.data.length === 0) {
+    document.getElementById('txTableWrap').innerHTML = '<div class="empty">Belum ada transaksi. Jalankan sync-all untuk mengambil data.</div>';
+    return;
+  }
+
+  document.getElementById('txBody').innerHTML = json.data.map(tx => {
+    const isNew = !seenSignatures.has(tx.signature);
+    seenSignatures.add(tx.signature);
+    return `
+    <tr class="${isNew ? 'row-new' : ''}">
+      <td class="addr">${shortenAddress(tx.wallet_address)}</td>
+      <td class="amount">${formatNumber(tx.amount)}</td>
+      <td><span class="badge">${tx.token}</span></td>
+      <td class="addr">${formatTime(tx.block_time)}</td>
+    </tr>`;
+  }).join('');
+}
+
+// Warna sel heatmap berdasarkan intensitas (0 = tidak ada aktivitas,
+// 1 = jam paling sibuk untuk token manapun di seluruh grid). Interpolasi
+// dari warna panel gelap ke warna accent hijau.
+function intensityToColor(t) {
+  if (t <= 0) return 'var(--panel-2)';
+  // interpolasi RGB dari #161c26 (panel-2) ke #14e0a4 (accent)
+  const from = [22, 28, 38];
+  const to = [20, 224, 164];
+  const rgb = from.map((c, i) => Math.round(c + (to[i] - c) * t));
+  return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+}
+
+async function loadHeatmap() {
+  const res = await fetch(`${API_BASE}/stats/heatmap`);
+  const json = await res.json();
+  if (!json.success) throw new Error('Gagal memuat heatmap');
+
+  const wrap = document.getElementById('heatmapWrap');
+
+  if (json.data.length === 0) {
+    wrap.innerHTML = '<div class="empty">Belum ada data untuk heatmap.</div>';
+    return;
+  }
+
+  // Susun data mentah [{token, hour, jumlah_transaksi, total_volume}, ...]
+  // menjadi map token -> { hour: {jumlah, volume} } supaya gampang di-lookup
+  // saat render grid 24 kolom.
+  const tokens = [...new Set(json.data.map(d => d.token))];
+  const map = {};
+  let maxVolume = 0;
+  json.data.forEach(d => {
+    if (!map[d.token]) map[d.token] = {};
+    const volume = parseFloat(d.total_volume);
+    map[d.token][d.hour] = { jumlah: parseInt(d.jumlah_transaksi, 10), volume };
+    if (volume > maxVolume) maxVolume = volume;
+  });
+
+  let html = '<div class="heatmap-grid">';
+
+  // Baris label jam (kolom pertama kosong untuk sejajar dengan label token)
+  html += '<div></div>';
+  for (let h = 0; h < 24; h++) {
+    html += `<div class="heatmap-hour-label">${h}</div>`;
+  }
+
+  // Satu baris per token
+  tokens.forEach(token => {
+    html += `<div class="heatmap-token-label">${token}</div>`;
+    for (let h = 0; h < 24; h++) {
+      const cell = map[token]?.[h];
+      if (!cell) {
+        html += `<div class="heatmap-cell" data-empty="true"></div>`;
+      } else {
+        const intensity = maxVolume > 0 ? cell.volume / maxVolume : 0;
+        const color = intensityToColor(intensity);
+        html += `
+          <div class="heatmap-cell" style="background:${color}">
+            <div class="tooltip">${token} · jam ${h}:00<br>${cell.jumlah} tx · ${formatNumber(cell.volume)} volume</div>
+          </div>`;
+      }
+    }
+  });
+
+  html += '</div>';
+
+  // Legenda skala warna
+  html += `
+    <div class="heatmap-legend">
+      <span>Sepi</span>
+      <span class="swatch" style="background:${intensityToColor(0.15)}"></span>
+      <span class="swatch" style="background:${intensityToColor(0.4)}"></span>
+      <span class="swatch" style="background:${intensityToColor(0.7)}"></span>
+      <span class="swatch" style="background:${intensityToColor(1)}"></span>
+      <span>Ramai</span>
+    </div>`;
+
+  wrap.innerHTML = html;
+}
+
+function formatHolding(hours) {
+  if (!hours || hours <= 0) return '—';
+  if (hours < 24) return `${hours.toFixed(1)} jam`;
+  return `${(hours / 24).toFixed(1)} hari`;
+}
+
+// Sparkline mini (SVG polyline) untuk profit history kumulatif.
+// Dibangun manual (tanpa library chart) supaya tetap ringan.
+function buildSparkline(history) {
+  if (!history || history.length < 2) {
+    return '<div class="wa-sparkline-empty">Belum cukup data untuk grafik</div>';
+  }
+  const values = history.map(h => h.cumulative_profit);
+  const min = Math.min(...values, 0);
+  const max = Math.max(...values, 0);
+  const range = (max - min) || 1;
+  const w = 200, h = 40;
+
+  const points = values.map((v, i) => {
+    const x = (i / (values.length - 1)) * w;
+    const y = h - ((v - min) / range) * h;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+
+  const last = values[values.length - 1];
+  const color = last >= 0 ? 'var(--accent)' : 'var(--danger)';
+
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" class="wa-sparkline">
+    <polyline points="${points}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+  </svg>`;
+}
+
+async function loadWalletAnalytics() {
+  const res = await fetch(`${API_BASE}/wallets/analytics`);
+  const json = await res.json();
+  if (!json.success) throw new Error('Gagal memuat wallet analytics');
+
+  const wrap = document.getElementById('waWrap');
+
+  if (json.data.length === 0) {
+    wrap.innerHTML = '<div class="empty">Belum ada data analytics wallet.</div>';
+    return;
+  }
+
+  wrap.innerHTML = json.data.map(w => {
+    const roiColor = w.roi_percent >= 0 ? 'var(--accent)' : 'var(--danger)';
+    return `
+    <div class="wa-card" onclick="window.location.href='wallet-detail.html?address=${encodeURIComponent(w.wallet_address)}'">
+      <div class="wa-head">
+        <span class="addr">${shortenAddress(w.wallet_address)}</span>
+        <span class="badge">${w.top_token}</span>
+      </div>
+      <div class="wa-metrics">
+        <div>
+          <div class="wa-metric-label">ROI</div>
+          <div class="wa-metric-value" style="color:${roiColor}">${w.roi_percent}%</div>
+        </div>
+        <div>
+          <div class="wa-metric-label">Win rate</div>
+          <div class="wa-metric-value">${w.win_rate_percent}%</div>
+        </div>
+        <div>
+          <div class="wa-metric-label">Avg holding</div>
+          <div class="wa-metric-value">${formatHolding(w.avg_holding_hours)}</div>
+        </div>
+      </div>
+      <div class="wa-profit-label">Profit history</div>
+      ${buildSparkline(w.profit_history)}
+      <div class="wa-foot">
+        <span>${w.closed_trades} posisi ditutup</span>
+        <span>profit ${formatNumber(w.total_realized_profit_usd)}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function setStatus(state, message) {
+  const wrap = document.getElementById('statusWrap');
+  const dot = document.getElementById('statusDot');
+  const text = document.getElementById('statusText');
+  const updated = document.getElementById('statusUpdated');
+
+  dot.className = 'dot ' + state; // 'ok' | 'error' | 'loading'
+  wrap.classList.toggle('error', state === 'error');
+  text.textContent = message;
+
+  if (state === 'ok') {
+    const now = new Date();
+    updated.textContent = `· update terakhir ${now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+  } else {
+    updated.textContent = '';
+  }
+}
+
+function showToolbarMsg(message, type) {
+  const el = document.getElementById('toolbarMsg');
+  el.textContent = message;
+  el.className = 'toolbar-msg' + (type ? ' ' + type : '');
+}
+
+/**
+ * Memicu download file dari response fetch. Backend mengirim CSV
+ * dengan header Content-Disposition: attachment, tapi karena kita
+ * memanggilnya lewat fetch() (bukan navigasi langsung ke URL),
+ * kita perlu ambil blob-nya lalu buat link download manual.
+ */
+async function downloadCsvFromEndpoint(url, fallbackFilename) {
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Gagal mengunduh (status ${res.status})`);
+  }
+  const blob = await res.blob();
+
+  // Ambil nama file dari header Content-Disposition kalau ada,
+  // supaya konsisten dengan nama yang ditentukan backend.
+  const disposition = res.headers.get('Content-Disposition') || '';
+  const match = disposition.match(/filename="(.+?)"/);
+  const filename = match ? match[1] : fallbackFilename;
+
+  const downloadUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = downloadUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(downloadUrl);
+}
+
+document.getElementById('exportTxBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('exportTxBtn');
+  btn.disabled = true;
+  showToolbarMsg('Mengunduh transaksi...', '');
+  try {
+    await downloadCsvFromEndpoint(`${API_BASE}/transactions/export`, 'transactions.csv');
+    showToolbarMsg('Transaksi berhasil diunduh.', 'success');
+  } catch (err) {
+    showToolbarMsg('Gagal mengunduh transaksi: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('exportAnalyticsBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('exportAnalyticsBtn');
+  btn.disabled = true;
+  showToolbarMsg('Mengunduh wallet analytics...', '');
+  try {
+    await downloadCsvFromEndpoint(`${API_BASE}/wallets/analytics/export`, 'wallet_analytics.csv');
+    showToolbarMsg('Wallet analytics berhasil diunduh.', 'success');
+  } catch (err) {
+    showToolbarMsg('Gagal mengunduh wallet analytics: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// Klik tombol "Import wallet" akan membuka dialog pilih file
+// secara terprogram, supaya tampilannya bisa disesuaikan dengan
+// tombol lain (input file bawaan browser sulit di-styling).
+document.getElementById('importWalletBtn').addEventListener('click', () => {
+  document.getElementById('importFileInput').click();
+});
+
+document.getElementById('importFileInput').addEventListener('change', async (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const importBtn = document.getElementById('importWalletBtn');
+  importBtn.disabled = true;
+  showToolbarMsg('Membaca file CSV...', '');
+
+  try {
+    // Baca isi file sebagai teks di browser (bukan mengirim file
+    // mentahnya) — sesuai desain backend yang menerima { csvText }
+    // sebagai JSON biasa, tanpa perlu multer/multipart upload.
+    const csvText = await file.text();
+
+    showToolbarMsg('Mengimpor wallet...', '');
+    const res = await fetch(`${API_BASE}/wallets/import`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ csvText }),
+    });
+    const json = await res.json();
+
+    if (!json.success) {
+      throw new Error(json.message || 'Gagal mengimpor wallet');
+    }
+
+    showToolbarMsg(json.message, 'success');
+
+    // Refresh dashboard supaya wallet baru langsung terlihat
+    // di kartu "Wallet dipantau" dan daftar lainnya.
+    init();
+  } catch (err) {
+    showToolbarMsg('Gagal mengimpor: ' + err.message, 'error');
+  } finally {
+    importBtn.disabled = false;
+    // Reset input supaya file yang sama bisa dipilih lagi kalau perlu
+    event.target.value = '';
+  }
+});
+
+async function init() {
+  setStatus('loading', 'Memuat data...');
+  // Jalankan satu-satu (bukan Promise.all) supaya satu endpoint yang
+  // gagal tidak membatalkan render endpoint lain yang sebenarnya sukses,
+  // dan supaya pesan error bisa lebih spesifik menunjuk endpoint mana
+  // yang bermasalah.
+  const results = await Promise.allSettled([loadSummary(), loadRecent(), loadHeatmap(), loadWalletAnalytics()]);
+  const failed = results.filter(r => r.status === 'rejected');
+
+  if (failed.length === 0) {
+    setStatus('ok', 'Terhubung ke server');
+  } else if (failed.length === results.length) {
+    setStatus('error', 'Gagal terhubung ke server (pastikan npm run dev sedang berjalan)');
+  } else {
+    setStatus('error', `Sebagian data gagal dimuat (${failed.length}/${results.length} endpoint)`);
+  }
+
+  failed.forEach(f => console.error(f.reason));
+}
+
+init();
+setInterval(init, 30000);
+</script>
+</body>
+</html>
